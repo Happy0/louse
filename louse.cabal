@@ -40,6 +40,7 @@ library
     MultiWayIf
     OverloadedStrings
     ScopedTypeVariables
+    RankNTypes
   other-extensions:
     CPP
     FlexibleContexts
@@ -52,6 +53,8 @@ library
                         Data.Louse.Query
                         Data.Louse.Query.Selector
                         Data.Louse.Read
+                        Data.Louse.Remote.Repository
+                        Data.Louse.Remote.Github
                         Data.Louse.Schemata
                         Data.Louse.Status
                         Data.Louse.Templates
@@ -71,6 +74,7 @@ library
     , directory >=1.2.2
     , editor-open >=0.4
     , exceptional >=0.1.4.3
+    , github
     , MissingH
     , mtl
     , resourcet
