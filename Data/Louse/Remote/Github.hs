@@ -7,8 +7,13 @@ module Data.Louse.Remote.Github where
     import Data.Conduit
     import Control.Monad.Trans.Resource
     import Control.Monad.IO.Class
-    import Data.Louse.Types
+    import qualified Data.Louse.Types as LT
     import qualified Data.Text as T
+    import Data.Maybe
+    import Control.Exception
+    import Github.Users
+    import Github.Issues.Comments
+    import qualified Github.Data.Definitions as G
 
     data Github = Github
 
@@ -22,16 +27,51 @@ module Data.Louse.Remote.Github where
                     either (fail . show) (L.sourceList . map issueToBug) issues
 
 
-    issueToBug :: Issue -> Bug
-    issueToBug issue = Bug reporter bugCreationDate bugTitle bugDescription bugOpen bugComments
+    issueToBug :: Issue -> LT.Bug
+    issueToBug issue = LT.Bug reporter bugCreationDate bugTitle bugDescription bugOpen bugComments
 
         where
-            -- TODO: API doesn't seem to make it easy to get the e-mail address (perhaps it's not possible for organisations or something)
-            -- do we need to change the type for Bug -> Person ?
-            reporter = Person (T.pack . githubOwnerLogin . issueUser $ issue) undefined
-            bugCreationDate = undefined
-            bugTitle = undefined
-            bugDescription = undefined
-            bugOpen = undefined
+            reporter = LT.Person (T.pack . githubOwnerLogin . issueUser $ issue) undefined
+            bugCreationDate = fromGithubDate . issueCreatedAt $ issue
+            bugTitle = T.pack . issueTitle $ issue
+            bugDescription = maybe (T.pack "") (T.pack) $ issueBody issue
+            bugOpen = isNothing $ issueClosedBy issue
             bugComments = undefined
+
+            owner = (githubOwnerLogin . issueUser) issue
+
+    getAuthor :: Issue -> IO T.Text
+    getAuthor issue = 
+        do
+            result <- userInfoFor issueOwner
+            case result of
+                Left err -> (fail . show) err
+                Right owner -> return . maybe (T.pack "") T.pack $ detailedOwnerEmail owner
+
+        where
+            issueOwner = githubOwnerLogin (issueUser issue)
+
+    getComments :: String -> String -> Int -> IO [LT.Comment]
+    getComments user repository issueId = 
+        do
+            result <- comments  user repository issueId
+            case result of
+                Left err -> fail . show $ err
+                Right githubComments -> return $ map toLouseComment githubComments
+
+    toLouseComment :: G.IssueComment -> LT.Comment
+    toLouseComment issueComment = LT.Comment person date text
+
+        where
+            -- TODO: Get E-mail addresses
+            person = LT.Person (T.pack $ githubOwnerLogin $ issueCommentUser issueComment) ""
+            date = fromGithubDate $ issueCommentCreatedAt issueComment
+            text = T.pack $ issueCommentBody issueComment
+
+
+
+
+            
+
+
 
