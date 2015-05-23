@@ -1,4 +1,4 @@
-module Data.Louse.Remote.Github where
+module Data.Louse.Remote.Github(getIssues, Github(Github)) where
 
     import Data.Louse.Remote.Repository
     import Github.Issues
@@ -24,19 +24,21 @@ module Data.Louse.Remote.Github where
                 do
                     issues <- liftIO $ issuesForRepo user repo []
                     -- TODO: Stream by paging through results using the github library's [IssueLimitation] param 
-                    either (fail . show) (L.sourceList . map issueToBug) issues
+                    either (fail . show) (\x-> L.sourceList $ map (issueToBug user repo) x) issues
 
 
-    issueToBug :: Issue -> LT.Bug
-    issueToBug issue = LT.Bug reporter bugCreationDate bugTitle bugDescription bugOpen bugComments
+    issueToBug :: String -> String -> Issue -> IO LT.Bug
+    issueToBug user repo issue = 
+        do
+            githubComments <- getComments user repo (issueId issue)
+            return $ LT.Bug reporter bugCreationDate bugTitle bugDescription bugOpen githubComments
 
         where
-            reporter = LT.Person (T.pack . githubOwnerLogin . issueUser $ issue) undefined
+            reporter = LT.Person (T.pack . githubOwnerLogin . issueUser $ issue) ""
             bugCreationDate = fromGithubDate . issueCreatedAt $ issue
             bugTitle = T.pack . issueTitle $ issue
             bugDescription = maybe (T.pack "") (T.pack) $ issueBody issue
             bugOpen = isNothing $ issueClosedBy issue
-            bugComments = undefined
 
             owner = (githubOwnerLogin . issueUser) issue
 

@@ -14,4 +14,4 @@ module Data.Louse.Remote.Repository where
 
 			-todo: Consider error handling
 		-}
-		getIssues :: a -> Maybe Owner -> Repository -> Producer (ResourceT IO) Bug
+		getIssues :: a -> Maybe Owner -> Repository -> Producer IO Bug
