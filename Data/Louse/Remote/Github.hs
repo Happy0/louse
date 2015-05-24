@@ -15,12 +15,14 @@ module Data.Louse.Remote.Github(getIssues, Github(Github)) where
     import Github.Issues.Comments
     import qualified Github.Data.Definitions as G
 
-    data Github = Github
+    type Owner = String
+    type Repository = String
+
+    data Github = Github Owner Repository 
 
     instance RemoteRepository Github where
 
-        getIssues github Nothing _ = fail "Github requires that a owner is specified for the getIssues operation"
-        getIssues github (Just user) repo = 
+        getIssues (Github user repo) = 
                 do
                     issues <- liftIO $ issuesForRepo user repo []
                     case issues of

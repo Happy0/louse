@@ -4,14 +4,10 @@ module Data.Louse.Remote.Repository where
 	import Data.Conduit
 	import Control.Monad.Trans.Resource
 
-	type Owner = String
-	type Repository = String
-
-
 	class RemoteRepository a where
 		{-
 			Returns a list of issues from the remote repository as a stream.
 
 			-todo: Consider error handling
 		-}
-		getIssues :: a -> Maybe Owner -> Repository -> Producer IO Bug
+		getIssues :: a -> Producer IO Bug
