@@ -11,6 +11,6 @@ module Main where
 	main =
 		do
 			let github = Github
-			let producer = getIssues github (Just "Ornicar") "lila"
+			let producer = getIssues github (Just "ornicar") "lila"
 			let sink = L.mapM_ (putStrLn . show)
 			connect producer sink
