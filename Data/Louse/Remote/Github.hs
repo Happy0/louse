@@ -22,19 +22,21 @@ module Data.Louse.Remote.Github(getIssues, Github(Github)) where
         getIssues github Nothing _ = fail "Github requires that a owner is specified for the getIssues operation"
         getIssues github (Just user) repo = 
                 do
-                    issues <- liftIO $ issuesForRepo user repo []
-                    -- TODO: Stream by paging through results using the github library's [IssueLimitation] param 
-                    either (fail . show) (\x-> L.sourceList $ map (issueToBug user repo) x) issues
-
+                    Right issues <- liftIO $ issuesForRepo user repo []
+                    let source = L.sourceList issues
+                    let conduit = L.mapM (issueToBug user repo)
+                    source $= conduit
 
     issueToBug :: String -> String -> Issue -> IO LT.Bug
     issueToBug user repo issue = 
         do
             githubComments <- getComments user repo (issueId issue)
+            emailAddress <- getUserEmail owner
+            let reporter = LT.Person (T.pack . githubOwnerLogin . issueUser $ issue) emailAddress
+
             return $ LT.Bug reporter bugCreationDate bugTitle bugDescription bugOpen githubComments
 
         where
-            reporter = LT.Person (T.pack . githubOwnerLogin . issueUser $ issue) ""
             bugCreationDate = fromGithubDate . issueCreatedAt $ issue
             bugTitle = T.pack . issueTitle $ issue
             bugDescription = maybe (T.pack "") (T.pack) $ issueBody issue
@@ -42,16 +44,13 @@ module Data.Louse.Remote.Github(getIssues, Github(Github)) where
 
             owner = (githubOwnerLogin . issueUser) issue
 
-    getAuthor :: Issue -> IO T.Text
-    getAuthor issue = 
+    getUserEmail :: String -> IO T.Text
+    getUserEmail userName = 
         do
-            result <- userInfoFor issueOwner
+            result <- userInfoFor userName
             case result of
                 Left err -> (fail . show) err
                 Right owner -> return . maybe (T.pack "") T.pack $ detailedOwnerEmail owner
-
-        where
-            issueOwner = githubOwnerLogin (issueUser issue)
 
     getComments :: String -> String -> Int -> IO [LT.Comment]
     getComments user repository issueId = 
@@ -59,14 +58,17 @@ module Data.Louse.Remote.Github(getIssues, Github(Github)) where
             result <- comments  user repository issueId
             case result of
                 Left err -> fail . show $ err
-                Right githubComments -> return $ map toLouseComment githubComments
+                Right githubComments -> sequence $ map toLouseComment githubComments
 
-    toLouseComment :: G.IssueComment -> LT.Comment
-    toLouseComment issueComment = LT.Comment person date text
+    toLouseComment :: G.IssueComment -> IO LT.Comment
+    toLouseComment issueComment = 
+        do
+            let commentorLogin =  githubOwnerLogin $ issueCommentUser issueComment
+            commentorEmailAddress <- getUserEmail commentorLogin
+            let person = LT.Person (T.pack $ commentorLogin) commentorEmailAddress
+            return $ LT.Comment person date text
 
         where
-            -- TODO: Get E-mail addresses
-            person = LT.Person (T.pack $ githubOwnerLogin $ issueCommentUser issueComment) ""
             date = fromGithubDate $ issueCommentCreatedAt issueComment
             text = T.pack $ issueCommentBody issueComment
 
