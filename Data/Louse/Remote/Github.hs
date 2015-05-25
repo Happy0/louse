@@ -23,26 +23,29 @@ module Data.Louse.Remote.Github(getIssues, Github(Github)) where
 
     instance RemoteRepository Github where
 
-        getIssues (Github user repo auth) = 
+        getIssues github = 
                 do
                     issues <- liftIO $ issuesForRepo' auth user repo []
                     case issues of
                         Left err -> liftIO $ putStrLn "Failed at repo" >> (fail . show) err
                         Right issues -> do
                             let source = L.sourceList issues
-                            let conduit = L.mapM (issueToBug user repo)
+                            let conduit = L.mapM (issueToBug github)
                             source $= conduit
+                where
+                    Github user repo auth = github
 
-    issueToBug :: String -> String -> Issue -> IO LT.Bug
-    issueToBug user repo issue = 
+    issueToBug :: Github -> Issue -> IO LT.Bug
+    issueToBug github issue = 
         do
-            githubComments <- getComments user repo (issueNumber issue)
-            emailAddress <- getUserEmail owner
+            githubComments <- getComments github (issueNumber issue)
+            emailAddress <- getUserEmail github owner
             let reporter = LT.Person (T.pack owner) emailAddress
 
             return $ LT.Bug reporter bugCreationDate bugTitle bugDescription bugOpen githubComments
 
         where
+            (Github user repo auth) = github
             bugCreationDate = fromGithubDate . issueCreatedAt $ issue
             bugTitle = T.pack . issueTitle $ issue
             bugDescription = maybe (T.pack "") (T.pack) $ issueBody issue
@@ -50,26 +53,28 @@ module Data.Louse.Remote.Github(getIssues, Github(Github)) where
 
             owner = (githubOwnerLogin . issueUser) issue
 
-    getUserEmail :: String -> IO T.Text
-    getUserEmail userName = 
+    getUserEmail :: Github -> String -> IO T.Text
+    getUserEmail (Github _ _ auth) userName = 
         do
-            result <- userInfoFor userName
+            result <- userInfoFor' auth userName
             case result of
                 Left err -> putStrLn "e-mail fail" >> (fail . show) err
                 Right owner -> return . maybe (T.pack "") T.pack $ detailedOwnerEmail owner
 
-    getComments :: String -> String -> Int -> IO [LT.Comment]
-    getComments user repository issueId = 
+    getComments :: Github -> Int -> IO [LT.Comment]
+    getComments github issueId = 
         do
-            result <- comments user repository issueId
+            result <- comments' auth user repository issueId
             case result of
                 Left err -> putStrLn ("comments fail " ++ (show issueId)) >> (fail . show) err
-                Right githubComments -> sequence $ map toLouseComment githubComments
+                Right githubComments -> sequence $ map (toLouseComment github) githubComments
+        where
+            Github user repository auth = github
 
-    toLouseComment :: G.IssueComment -> IO LT.Comment
-    toLouseComment issueComment = 
+    toLouseComment :: Github -> G.IssueComment -> IO LT.Comment
+    toLouseComment github issueComment = 
         do
-            commentorEmailAddress <- getUserEmail commentorLogin
+            commentorEmailAddress <- getUserEmail github commentorLogin
             let person = LT.Person (T.pack $ commentorLogin) commentorEmailAddress
             return $ LT.Comment person date text
 
