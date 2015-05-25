@@ -51,7 +51,7 @@ module Data.Louse.Remote.Github(getIssues, makeGithub) where
     issueToBug :: Github -> Issue -> IO LT.Bug
     issueToBug github issue = 
         do
-            githubComments <- getComments github (issueNumber issue)
+            githubComments <- if issueComments issue > 0 then getComments github (issueNumber issue) else return []
             emailAddress <- getUserEmail github owner
             let reporter = LT.Person (T.pack owner) emailAddress
 
