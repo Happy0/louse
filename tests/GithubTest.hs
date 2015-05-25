@@ -11,7 +11,7 @@ module Main where
 	main :: IO ()
 	main =
 		do
-			let github = Github "ornicar" "lila" (Nothing)
+			github <- makeGithub "ornicar" "lila" Nothing
 			let producer = getIssues github 
 			let sink = L.mapM_ (putStrLn . show)
 			connect producer sink

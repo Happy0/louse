@@ -1,4 +1,4 @@
-module Data.Louse.Remote.Github(getIssues, Github(Github)) where
+module Data.Louse.Remote.Github(getIssues, makeGithub) where
 
     import Data.Louse.Remote.Repository
     import Github.Issues
@@ -15,11 +15,16 @@ module Data.Louse.Remote.Github(getIssues, Github(Github)) where
     import Github.Issues.Comments
     import qualified Github.Data.Definitions as G
     import Github.Auth
+    import qualified Data.Map as M
+    import Control.Concurrent.STM.TVar
+    import Control.Concurrent.STM
 
     type Owner = String
     type Repository = String
+    type EmailCache = M.Map String T.Text
 
-    data Github = Github {owner :: Owner, repository :: Repository, authentication :: Maybe GithubAuth } 
+
+    data Github = Github {owner :: Owner, repository :: Repository, authentication :: Maybe GithubAuth, emailCache :: TVar EmailCache } 
 
     instance RemoteRepository Github where
 
@@ -33,7 +38,15 @@ module Data.Louse.Remote.Github(getIssues, Github(Github)) where
                             let conduit = L.mapM (issueToBug github)
                             source $= conduit
                 where
-                    Github user repo auth = github
+                    Github user repo auth _ = github
+
+    makeGithub :: Owner -> Repository -> Maybe GithubAuth -> IO Github
+    makeGithub owner repository auth =
+        do
+            let cacheMap = M.empty
+            cache <- newTVarIO cacheMap
+            return $ Github owner repository auth cache
+
 
     issueToBug :: Github -> Issue -> IO LT.Bug
     issueToBug github issue = 
@@ -45,7 +58,7 @@ module Data.Louse.Remote.Github(getIssues, Github(Github)) where
             return $ LT.Bug reporter bugCreationDate bugTitle bugDescription bugOpen githubComments
 
         where
-            (Github user repo auth) = github
+            (Github user repo auth _) = github
             bugCreationDate = fromGithubDate . issueCreatedAt $ issue
             bugTitle = T.pack . issueTitle $ issue
             bugDescription = maybe (T.pack "") (T.pack) $ issueBody issue
@@ -54,12 +67,25 @@ module Data.Louse.Remote.Github(getIssues, Github(Github)) where
             owner = (githubOwnerLogin . issueUser) issue
 
     getUserEmail :: Github -> String -> IO T.Text
-    getUserEmail (Github _ _ auth) userName = 
+    getUserEmail (Github _ _ auth cache) userName = 
         do
-            result <- userInfoFor' auth userName
-            case result of
-                Left err -> putStrLn "e-mail fail" >> (fail . show) err
-                Right owner -> return . maybe (T.pack "") T.pack $ detailedOwnerEmail owner
+            cacheResult <- atomically $ do
+                userMap <- readTVar cache
+                return $ M.lookup userName userMap
+
+            case cacheResult of
+                Just cacheHit -> return cacheHit
+                Nothing ->
+                    do
+                        result <- userInfoFor' auth userName
+                        case result of
+                            Left err -> putStrLn "e-mail fail" >> (fail . show) err
+                            Right owner ->
+                                atomically $ do
+                                    let email = maybe "" T.pack $ detailedOwnerEmail owner
+                                    emailCache <- readTVar cache
+                                    writeTVar cache (M.insert userName email emailCache)
+                                    return email
 
     getComments :: Github -> Int -> IO [LT.Comment]
     getComments github issueId = 
@@ -69,7 +95,7 @@ module Data.Louse.Remote.Github(getIssues, Github(Github)) where
                 Left err -> putStrLn ("comments fail " ++ (show issueId)) >> (fail . show) err
                 Right githubComments -> sequence $ map (toLouseComment github) githubComments
         where
-            Github user repository auth = github
+            Github user repository auth _ = github
 
     toLouseComment :: Github -> G.IssueComment -> IO LT.Comment
     toLouseComment github issueComment = 
