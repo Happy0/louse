@@ -41,12 +41,7 @@ module Data.Louse.Remote.Github(getIssues, makeGithub) where
                     Github user repo auth _ = github
 
     makeGithub :: Owner -> Repository -> Maybe GithubAuth -> IO Github
-    makeGithub owner repository auth =
-        do
-            let cacheMap = M.empty
-            cache <- newTVarIO cacheMap
-            return $ Github owner repository auth cache
-
+    makeGithub owner repository auth = fmap (Github owner repository auth) $ newTVarIO M.empty
 
     issueToBug :: Github -> Issue -> IO LT.Bug
     issueToBug github issue = 
