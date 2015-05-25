@@ -120,6 +120,7 @@ executable github-test
    , conduit
    , conduit-extra
    , resourcet
+   , github
   main-is:             GithubTest.hs
   -- other-modules:       
   -- other-extensions:    

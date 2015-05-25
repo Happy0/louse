@@ -14,17 +14,18 @@ module Data.Louse.Remote.Github(getIssues, Github(Github)) where
     import Github.Users
     import Github.Issues.Comments
     import qualified Github.Data.Definitions as G
+    import Github.Auth
 
     type Owner = String
     type Repository = String
 
-    data Github = Github Owner Repository 
+    data Github = Github {owner :: Owner, repository :: Repository, authentication :: Maybe GithubAuth } 
 
     instance RemoteRepository Github where
 
-        getIssues (Github user repo) = 
+        getIssues (Github user repo auth) = 
                 do
-                    issues <- liftIO $ issuesForRepo user repo []
+                    issues <- liftIO $ issuesForRepo' auth user repo []
                     case issues of
                         Left err -> liftIO $ putStrLn "Failed at repo" >> (fail . show) err
                         Right issues -> do
@@ -60,7 +61,7 @@ module Data.Louse.Remote.Github(getIssues, Github(Github)) where
     getComments :: String -> String -> Int -> IO [LT.Comment]
     getComments user repository issueId = 
         do
-            result <- comments  user repository issueId
+            result <- comments user repository issueId
             case result of
                 Left err -> putStrLn ("comments fail " ++ (show issueId)) >> (fail . show) err
                 Right githubComments -> sequence $ map toLouseComment githubComments
