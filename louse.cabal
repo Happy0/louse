@@ -85,6 +85,8 @@ library
     , unordered-containers
     , yaml ==0.8.*
     , stm
+    , stm-conduit
+    , async
 
   if flag(dev)
     ghc-options:        -O0 -Wall
@@ -124,6 +126,8 @@ executable github-test
    , conduit-extra
    , resourcet
    , github
+   , stm-conduit
+
   main-is:             GithubTest.hs
   -- other-modules:       
   -- other-extensions:    

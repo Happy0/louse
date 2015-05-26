@@ -18,6 +18,8 @@ module Data.Louse.Remote.Github(getIssues, makeGithub) where
     import qualified Data.Map as M
     import Control.Concurrent.STM.TVar
     import Control.Concurrent.STM
+    import Control.Concurrent.Async
+    import Control.Monad
 
     type Owner = String
     type Repository = String
@@ -46,8 +48,13 @@ module Data.Louse.Remote.Github(getIssues, makeGithub) where
     issueToBug :: Github -> Issue -> IO LT.Bug
     issueToBug github issue = 
         do
-            githubComments <- if issueComments issue > 0 then getComments github (issueNumber issue) else return []
-            emailAddress <- getUserEmail github owner
+            (githubComments, emailAddress) <-
+                if issueComments issue > 0
+                    then
+                     concurrently (getComments github (issueNumber issue)) (getUserEmail github owner)
+                    else
+                        fmap (\email -> ([], email)) $ getUserEmail github owner
+
             let reporter = LT.Person (T.pack owner) emailAddress
 
             return $ LT.Bug reporter bugCreationDate bugTitle bugDescription bugOpen githubComments
@@ -79,7 +86,10 @@ module Data.Louse.Remote.Github(getIssues, makeGithub) where
                                 atomically $ do
                                     let email = maybe "" T.pack $ detailedOwnerEmail owner
                                     emailCache <- readTVar cache
-                                    writeTVar cache (M.insert userName email emailCache)
+
+                                    when (M.notMember userName emailCache) $
+                                        writeTVar cache (M.insert userName email emailCache)
+
                                     return email
 
     getComments :: Github -> Int -> IO [LT.Comment]
@@ -88,7 +98,7 @@ module Data.Louse.Remote.Github(getIssues, makeGithub) where
             result <- comments' auth user repository issueId
             case result of
                 Left err -> putStrLn ("comments fail " ++ (show issueId)) >> (fail . show) err
-                Right githubComments -> sequence $ map (toLouseComment github) githubComments
+                Right githubComments -> mapConcurrently (toLouseComment github) githubComments
         where
             Github user repository auth _ = github
 
