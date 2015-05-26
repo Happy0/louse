@@ -20,6 +20,7 @@ module Data.Louse.Remote.Github(getIssues, makeGithub) where
     import Control.Concurrent.STM
     import Control.Concurrent.Async
     import Control.Monad
+    import Data.List.Split
 
     type Owner = String
     type Repository = String
@@ -36,14 +37,17 @@ module Data.Louse.Remote.Github(getIssues, makeGithub) where
                     case issues of
                         Left err -> liftIO $ putStrLn "Failed at repo" >> (fail . show) err
                         Right issues -> do
-                            let source = L.sourceList issues
-                            let conduit = L.mapM (issueToBug github)
+                            let source = L.sourceList $ chunk 20 issues
+                            let conduit = L.concatMapM (issuesToBugs github)
                             source $= conduit
                 where
                     Github user repo auth _ = github
 
     makeGithub :: Owner -> Repository -> Maybe GithubAuth -> IO Github
     makeGithub owner repository auth = fmap (Github owner repository auth) $ newTVarIO M.empty
+
+    issuesToBugs :: Github -> [Issue] -> IO [LT.Bug]
+    issuesToBugs github = mapConcurrently (issueToBug github)
 
     issueToBug :: Github -> Issue -> IO LT.Bug
     issueToBug github issue = 

@@ -87,6 +87,7 @@ library
     , stm
     , stm-conduit
     , async
+    , split
 
   if flag(dev)
     ghc-options:        -O0 -Wall
